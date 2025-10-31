@@ -5,3 +5,5 @@ edition = "2024"
 
 [dependencies]
 ttfff-logic = { path = "../ttfff-logic" }
+rustc-hash = "2.1"
+petgraph = "0.8"

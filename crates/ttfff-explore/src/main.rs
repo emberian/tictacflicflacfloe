@@ -1,3 +1,5 @@
+use ttfff_explore::*;
+
 fn main() {
-    println!("Hello, world!");
+    println!("{}", report());
 }

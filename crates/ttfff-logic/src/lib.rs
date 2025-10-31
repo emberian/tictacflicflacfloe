@@ -8,12 +8,14 @@ pub enum Player {
     OT,
 }
 impl Player {
+    #[inline]
     pub fn other(&self) -> Player {
         match self {
             Player::XS => Player::OT,
             Player::OT => Player::XS,
         }
     }
+    #[inline]
     pub fn symbols(&self) -> &[Sym] {
         match self {
             Player::XS => &[Sym::X, Sym::S],
@@ -33,6 +35,8 @@ pub enum Sym {
 use Sym::*;
 
 impl Sym {
+    #[inline]
+
     pub fn excludes(self) -> Sym {
         match self {
             X => O,
@@ -41,6 +45,7 @@ impl Sym {
             S => T,
         }
     }
+    #[inline]
     pub fn other(self) -> Sym {
         match self {
             X => T,
@@ -49,6 +54,7 @@ impl Sym {
             S => O,
         }
     }
+    #[inline]
     pub fn player(self) -> Player {
         match self {
             X | S => Player::XS,
@@ -67,6 +73,7 @@ pub enum Place {
 use Place::*;
 
 impl Place {
+    #[inline]
     pub fn combine(self, other: Sym) -> Option<Place> {
         Some(match self {
             Empty => OnePlaced(other),
@@ -80,22 +87,24 @@ impl Place {
 pub struct PlaceIdx(pub u8);
 impl TryFrom<u8> for PlaceIdx {
     type Error = ();
+    #[inline]
     fn try_from(val: u8) -> Result<PlaceIdx, Self::Error> {
         if val >= 9 { Err(()) } else { Ok(PlaceIdx(val)) }
     }
 }
 impl PlaceIdx {
+    #[inline]
     pub fn index(&self) -> usize {
         self.0 as usize
     }
 }
 
-#[derive(Clone, Hash, Eq, PartialEq, Default)]
+#[derive(Clone, Hash, Eq, PartialEq, Default, Debug)]
 pub struct Board {
     pub places: [Place; 9],
 }
 
-#[derive(Clone, Hash, Eq, PartialEq)]
+#[derive(Clone, Hash, Eq, PartialEq, Debug)]
 pub struct Game {
     pub whos_next: Player,
     pub board: Board,
@@ -108,9 +117,23 @@ pub struct GameMove {
     pub drawn_symbol: Sym,
 }
 impl Game {
+    pub const XS_STARTS: Game = Game {
+        whos_next: Player::XS,
+        board: Board {
+            places: [Place::Empty; 9],
+        },
+    };
+    pub const OT_STARTS: Game = Game {
+        whos_next: Player::OT,
+        board: Board {
+            places: [Place::Empty; 9],
+        },
+    };
+
     // spec: try_move succeeds when m.who is self.whos_next
     // and their chosen place symbol compatibly combines
     // with existing places.
+    #[inline]
     pub fn try_move(&self, m: GameMove) -> Option<Game> {
         if m.who != self.whos_next {
             return None;
