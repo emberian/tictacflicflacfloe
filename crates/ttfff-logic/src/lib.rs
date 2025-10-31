@@ -159,6 +159,27 @@ impl Game {
         },
     };
 
+    pub fn from_history(moves: &[GameMove]) -> Option<Game> {
+        if moves.is_empty() {
+            return None;
+        }
+        let who_first = moves[0].who;
+        let mut g = if who_first == Player::XS {
+            Game::XS_STARTS
+        } else {
+            Game::OT_STARTS
+        };
+
+        for &m in moves {
+            match g.try_move(m) {
+                Some(ng) => g = ng,
+                None => return None,
+            }
+        }
+
+        Some(g)
+    }
+
     // spec: try_move succeeds when m.who is self.whos_next
     // and their chosen place symbol compatibly combines
     // with existing places.
