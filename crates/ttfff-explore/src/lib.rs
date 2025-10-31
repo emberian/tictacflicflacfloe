@@ -78,12 +78,9 @@ pub fn board_is_complete(board: &Board) -> bool {
 }
 
 pub struct Report {
-    pub all_xs_wins: usize,
-    pub all_ot_wins: usize,
-    pub xs_wins_starting: usize,
-    pub xs_loses_starting: usize,
-    pub ot_wins_starting: usize,
-    pub ot_loses_starting: usize,
+    pub xs_wins: usize,
+    pub ot_wins: usize,
+    pub draws: usize,
     pub states: usize,
     pub terminal: usize,
     pub incomplete: HashSet<Game>,
@@ -95,48 +92,27 @@ pub fn report() -> Report {
 
     let mut xs_wins = 0;
     let mut ot_wins = 0;
+    let mut draws = 0;
     let mut incomplete = HashSet::default();
 
     for state in &all_terminal {
         if !board_is_complete(&state.board) {
-            incomplete.insert(state.clone());
+            incomplete.insert(*state);
         }
 
-        match state.whos_next {
-            Player::XS => ot_wins += 1,
-            Player::OT => xs_wins += 1,
-        }
-    }
-
-    let xs_starts = enumerate_xs();
-    let xs_terminal = terminal_states(&xs_starts);
-    let mut xs_wins_starting = 0;
-    let mut xs_loses_starting = 0;
-    for state in xs_terminal.iter() {
-        match state.whos_next {
-            Player::XS => xs_loses_starting += 1,
-            Player::OT => xs_wins_starting += 1,
-        }
-    }
-
-    let ot_starts = enumerate_ot();
-    let ot_terminal = terminal_states(&ot_starts);
-    let mut ot_wins_starting = 0;
-    let mut ot_loses_starting = 0;
-    for state in ot_terminal.iter() {
-        match state.whos_next {
-            Player::XS => ot_wins_starting += 1,
-            Player::OT => ot_loses_starting += 1,
+        match state.score().winner() {
+            None => {
+                draws += 1;
+            }
+            Some(Player::XS) => xs_wins += 1,
+            Some(Player::OT) => ot_wins += 1,
         }
     }
 
     Report {
-        all_xs_wins: xs_wins,
-        all_ot_wins: ot_wins,
-        xs_wins_starting,
-        xs_loses_starting,
-        ot_wins_starting,
-        ot_loses_starting,
+        xs_wins: xs_wins,
+        ot_wins: ot_wins,
+        draws,
         states: all_games.len(),
         terminal: all_terminal.len(),
         incomplete: incomplete,
@@ -147,12 +123,9 @@ impl std::fmt::Display for Report {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "There are {} distinct game states.", self.states)?;
         writeln!(f, "There are {} terminal game states.", self.terminal)?;
-        writeln!(f, "XS wins overall: {}", self.all_xs_wins)?;
-        writeln!(f, "OT wins overall: {}", self.all_ot_wins)?;
-        writeln!(f, "XS wins when starting: {}", self.xs_wins_starting)?;
-        writeln!(f, "XS loses when starting: {}", self.xs_loses_starting)?;
-        writeln!(f, "OT wins when starting: {}", self.ot_wins_starting)?;
-        writeln!(f, "OT loses when starting: {}", self.ot_loses_starting)?;
+        writeln!(f, "XS wins: {}", self.xs_wins)?;
+        writeln!(f, "OT wins: {}", self.ot_wins)?;
+        writeln!(f, "Draws: {}", self.draws)?;
         for state in self.incomplete.iter() {
             writeln!(f, "Incomplete terminal state: {:?}", state)?;
         }

@@ -84,6 +84,14 @@ impl Place {
             _ => return None,
         })
     }
+
+    pub fn contains(&self, sym: Sym) -> bool {
+        match self {
+            Empty => false,
+            OnePlaced(s) => *s == sym,
+            TwoPlaced(s1, s2) => *s1 == sym || *s2 == sym,
+        }
+    }
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
@@ -120,6 +128,23 @@ pub struct GameMove {
     pub drawn_symbol: Sym,
 }
 
+pub struct GameScore {
+    pub xs: u8,
+    pub ot: u8,
+}
+
+impl GameScore {
+    pub fn winner(&self) -> Option<Player> {
+        if self.xs > self.ot {
+            Some(Player::XS)
+        } else if self.ot > self.xs {
+            Some(Player::OT)
+        } else {
+            None
+        }
+    }
+}
+
 impl Game {
     pub const XS_STARTS: Game = Game {
         whos_next: Player::XS,
@@ -151,6 +176,42 @@ impl Game {
                 });
             }
             None => return None,
+        }
+    }
+
+    pub const LINES: [[usize; 3]; 8] = [
+        // horizontals
+        [0, 1, 2],
+        [3, 4, 5],
+        [6, 7, 8],
+        // verticals
+        [0, 3, 6],
+        [1, 4, 7],
+        [2, 5, 8],
+        // diagonals
+        [0, 4, 8],
+        [2, 4, 6],
+    ];
+
+    pub fn score(&self) -> GameScore {
+        // detect three-in-a-row for each symbol.
+        // player gets one point per three-in-a-row.
+        let mut scores = [0; 2];
+
+        for sym in [X, O, T, S] {
+            for line in Self::LINES {
+                if line
+                    .iter()
+                    .all(|&place_idx| self.board.places[place_idx].contains(sym))
+                {
+                    scores[sym.player() as usize] += 1;
+                }
+            }
+        }
+
+        GameScore {
+            xs: scores[Player::XS as usize],
+            ot: scores[Player::OT as usize],
         }
     }
 }
