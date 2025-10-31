@@ -1,3 +1,8 @@
-[build]
+[target.aarch64-apple-darwin]
 rustflags = ["-C", "target-cpu=native"]
 
+[target.x86_64-pc-windows-msvc]
+rustflags = [
+  "-C", "target-feature=+crt-static",   # single-file exe: static CRT
+  "-C", "target-cpu=x86-64-v2"          # or "x86-64" for max compatibility
+]
