@@ -1,0 +1,28 @@
+# Tic Tac Flic Flac Floe - an abstract strategy game
+
+The game is played on a standard 3x3 "tic tac toe" grid.
+
+However, instead of just X and O, there are also T and S.
+
+At the start of the game, one player picks XT and the other
+player picks OS. These are the symbols they can draw.
+
+Play progresses by players taking turns drawing one of their
+symbols on the board. If an X (symmetrically, T) is present
+in a grid square, an O cannot be placed (symmetrically, S),
+and viseversa -- an O (S) blocks an X (T) from being placed.
+
+The game ends when nobody can draw a symbol.
+
+Part of this project is to explore different win conditions.
+
+The original win condition (to be explored) is "the player
+with the most three-in-a-rows".
+
+## Questions
+
+- Do players always have an available move until the board is filled?
+- Is this equivalent to two parallel regular tic-tac-toes?
+- Is the game balanced? Is there first player advantage?
+- Can we solve the game, or force draws like in tictactoe?
+- What symmetries exist.
