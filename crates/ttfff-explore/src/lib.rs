@@ -49,7 +49,7 @@ pub fn canonicalize_game(game: &Game) -> Game {
 
 pub fn possible_moves(game: &Game, acc: &mut Vec<GameMove>) {
     for (idx, place) in game.board.places.iter().enumerate() {
-        for &sym in game.whos_next.symbols() {
+        for sym in game.whos_next.symbols() {
             if let Some(_) = place.combine(sym) {
                 acc.push(GameMove {
                     who: game.whos_next,
@@ -105,11 +105,12 @@ pub fn enumerate_all() -> HashSet<Game> {
 
 pub fn terminal_states(all_games: &HashSet<Game>) -> HashSet<Game> {
     let mut terminals = HashSet::default();
-    for g in all_games.iter() {
-        let mut moves = Vec::with_capacity(18);
+    let mut moves = Vec::with_capacity(18);
+    for g in all_games {
+        moves.clear();
         possible_moves(g, &mut moves);
         if moves.is_empty() {
-            terminals.insert(g.clone());
+            terminals.insert(*g);
         }
     }
     terminals

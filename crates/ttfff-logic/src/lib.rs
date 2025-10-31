@@ -12,18 +12,16 @@ pub enum Player {
     OT,
 }
 impl Player {
-    #[inline]
     pub fn other(&self) -> Player {
         match self {
             Player::XS => Player::OT,
             Player::OT => Player::XS,
         }
     }
-    #[inline]
-    pub fn symbols(&self) -> &[Sym; 2] {
+    pub fn symbols(&self) -> [Sym; 2] {
         match self {
-            Player::XS => &[X, S],
-            Player::OT => &[O, T],
+            Player::XS => [X, S],
+            Player::OT => [O, T],
         }
     }
 }
@@ -45,14 +43,6 @@ impl Sym {
             O => X,
             T => S,
             S => T,
-        }
-    }
-    pub fn other(self) -> Sym {
-        match self {
-            X => T,
-            T => X,
-            O => S,
-            S => O,
         }
     }
     pub fn player(self) -> Player {

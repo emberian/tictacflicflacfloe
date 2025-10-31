@@ -85,20 +85,34 @@ impl GameMove {
     }
 }
 
+impl Board {
+    pub fn to_bits(&self) -> u64 {
+        let mut bits = 0u64;
+        for (i, p) in self.places.iter().enumerate() {
+            let pb = p.to_bits() as u64;
+            bits |= pb << (4 * i);
+        }
+        bits
+    }
+
+    pub fn from_bits(bits: u64) -> Board {
+        let mut places = [Place::Empty; 9];
+        for i in 0..9 {
+            let pb = ((bits >> (4 * i)) & 0b1111) as u8;
+            places[i] = Place::from_bits(pb);
+        }
+        Board { places }
+    }
+}
+
 impl Game {
     pub fn to_bits(&self) -> u64 {
-        // 9*4 bits per place, 1 bit for whos_next
-        // 36 + 1 <= 64
-        let mut k = match self.whos_next {
+        let k = match self.whos_next {
             Player::XS => 0,
-            Player::OT => 1 << 63,
+            Player::OT => 1u64 << 63,
         };
 
-        for (i, p) in self.board.places.iter().enumerate() {
-            let bits = p.to_bits() as u64;
-            k |= bits << (4 * i);
-        }
-        k
+        k | self.board.to_bits()
     }
 
     pub fn from_bits(key: u64) -> Game {
@@ -107,15 +121,9 @@ impl Game {
         } else {
             Player::OT
         };
-        let mut places = [Place::Empty; 9];
-        for i in 0..9 {
-            let bits = ((key >> (4 * i)) & 0b1111) as u8;
-            places[i] = Place::from_bits(bits);
-        }
         Game {
             whos_next,
-            board: Board { places },
+            board: Board::from_bits(key & !(1 << 63)),
         }
     }
-
 }
