@@ -3,7 +3,6 @@ use rustc_hash::FxHashSet as HashSet;
 pub use ttfff_logic::*;
 
 pub fn possible_moves(game: &Game, acc: &mut Vec<GameMove>) {
-    acc.reserve(18);
     for (idx, place) in game.board.places.iter().enumerate() {
         for &sym in game.whos_next.symbols() {
             if let Some(_) = place.combine(sym) {
@@ -17,28 +16,29 @@ pub fn possible_moves(game: &Game, acc: &mut Vec<GameMove>) {
     }
 }
 
-pub fn enumerate_from(stack: &mut Vec<Game>, games: &mut HashSet<Game>, moves: &mut Vec<GameMove>) {
+pub fn enumerate_from(stack: &mut Vec<u64>, games: &mut HashSet<u64>, moves: &mut Vec<GameMove>) {
     moves.clear();
     while let Some(g) = stack.pop() {
-        if !games.insert(g.clone()) {
+        if !games.insert(g) {
             continue;
         }
+        let g = Game::from_bits(g);
         possible_moves(&g, moves);
         for m in moves.drain(..) {
             if let Some(ng) = g.try_move(m) {
-                stack.push(ng);
+                stack.push(ng.to_bits());
             }
         }
     }
 }
 
 pub fn enumerate(game: Game) -> HashSet<Game> {
-    let mut initial_states = vec![game];
+    let mut initial_states = vec![game.to_bits()];
     let mut games = HashSet::default();
     let mut moves = Vec::with_capacity(18);
     enumerate_from(&mut initial_states, &mut games, &mut moves);
 
-    games
+    games.into_iter().map(Game::from_bits).collect()
 }
 
 pub fn enumerate_xs() -> HashSet<Game> {
@@ -50,12 +50,12 @@ pub fn enumerate_ot() -> HashSet<Game> {
 }
 
 pub fn enumerate_all() -> HashSet<Game> {
-    let mut initial_states = vec![Game::XS_STARTS, Game::OT_STARTS];
+    let mut initial_states = vec![Game::XS_STARTS.to_bits(), Game::OT_STARTS.to_bits()];
     let mut games = HashSet::default();
-    let mut moves = Vec::with_capacity(36);
+    let mut moves = Vec::with_capacity(18);
     enumerate_from(&mut initial_states, &mut games, &mut moves);
 
-    games
+    games.into_iter().map(Game::from_bits).collect()
 }
 
 pub fn terminal_states(all_games: &HashSet<Game>) -> HashSet<Game> {
@@ -139,7 +139,7 @@ pub fn report() -> Report {
         ot_loses_starting,
         states: all_games.len(),
         terminal: all_terminal.len(),
-        incomplete: all_terminal,
+        incomplete: incomplete,
     }
 }
 

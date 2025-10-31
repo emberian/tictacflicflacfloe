@@ -1,5 +1,9 @@
 #![no_std]
 
+use core::cmp::{max, min};
+
+mod bits;
+
 // step 1: basic implement of game
 
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
@@ -16,10 +20,10 @@ impl Player {
         }
     }
     #[inline]
-    pub fn symbols(&self) -> &[Sym] {
+    pub fn symbols(&self) -> &[Sym; 2] {
         match self {
-            Player::XS => &[Sym::X, Sym::S],
-            Player::OT => &[Sym::O, Sym::T],
+            Player::XS => &[X, S],
+            Player::OT => &[O, T],
         }
     }
 }
@@ -35,8 +39,6 @@ pub enum Sym {
 use Sym::*;
 
 impl Sym {
-    #[inline]
-
     pub fn excludes(self) -> Sym {
         match self {
             X => O,
@@ -45,7 +47,6 @@ impl Sym {
             S => T,
         }
     }
-    #[inline]
     pub fn other(self) -> Sym {
         match self {
             X => T,
@@ -54,7 +55,6 @@ impl Sym {
             S => O,
         }
     }
-    #[inline]
     pub fn player(self) -> Player {
         match self {
             X | S => Player::XS,
@@ -73,11 +73,14 @@ pub enum Place {
 use Place::*;
 
 impl Place {
-    #[inline]
     pub fn combine(self, other: Sym) -> Option<Place> {
         Some(match self {
             Empty => OnePlaced(other),
-            OnePlaced(this) if other != this.excludes() => TwoPlaced(this, other),
+            OnePlaced(this) if this != other && other != this.excludes() => {
+                // note: this forgets the order of placement in favor of
+                // a canonical representation.
+                TwoPlaced(min(this, other), max(this, other))
+            }
             _ => return None,
         })
     }
@@ -87,35 +90,36 @@ impl Place {
 pub struct PlaceIdx(pub u8);
 impl TryFrom<u8> for PlaceIdx {
     type Error = ();
-    #[inline]
     fn try_from(val: u8) -> Result<PlaceIdx, Self::Error> {
         if val >= 9 { Err(()) } else { Ok(PlaceIdx(val)) }
     }
 }
 impl PlaceIdx {
-    #[inline]
     pub fn index(&self) -> usize {
         self.0 as usize
     }
 }
 
-#[derive(Clone, Hash, Eq, PartialEq, Default, Debug)]
+#[derive(Copy, Clone, Hash, Eq, PartialEq, Default, Debug)]
 pub struct Board {
     pub places: [Place; 9],
 }
 
-#[derive(Clone, Hash, Eq, PartialEq, Debug)]
+// A game is only 19 bytes.
+// But game.to_bits() packs it into u64.
+#[derive(Copy, Clone, Hash, Eq, PartialEq, Debug)]
 pub struct Game {
     pub whos_next: Player,
     pub board: Board,
 }
 
-#[derive(Clone, Hash, Eq, PartialEq)]
+#[derive(Copy, Clone, Hash, Eq, PartialEq)]
 pub struct GameMove {
     pub who: Player,
     pub place: PlaceIdx,
     pub drawn_symbol: Sym,
 }
+
 impl Game {
     pub const XS_STARTS: Game = Game {
         whos_next: Player::XS,
@@ -133,7 +137,6 @@ impl Game {
     // spec: try_move succeeds when m.who is self.whos_next
     // and their chosen place symbol compatibly combines
     // with existing places.
-    #[inline]
     pub fn try_move(&self, m: GameMove) -> Option<Game> {
         if m.who != self.whos_next {
             return None;
@@ -151,7 +154,6 @@ impl Game {
         }
     }
 }
-
 
 // step 2: optimize representation for tree exploration
 // step 3: write enumerator
