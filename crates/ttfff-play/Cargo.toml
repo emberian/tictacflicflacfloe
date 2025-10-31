@@ -2,8 +2,22 @@
 name = "ttfff-play"
 version = "0.1.0"
 edition = "2024"
+repository = "https://github.com/emberian/tictacflicflacfloe"
+authors = ["ember arlynx <ember@lunar.town>"]
+
+[package.metadata.wix]
+upgrade-guid = "EADD7F50-93C8-4559-9DD3-D76A68202CE6"
+path-guid = "F3592292-B5B4-4200-9428-6DFAAEBF0FEE"
+license = false
+eula = false
 
 [dependencies]
 eframe = { version = "0.33", features = ["glow"] }
 ttfff-explore = { path = "../ttfff-explore" }
 ttfff-logic = { path = "../ttfff-logic" }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+console_error_panic_hook = "0.1"
+tracing-wasm = "0.2"
+wasm-bindgen-futures = "0.4"
+web-sys = { version = "0.3", features = ["Document", "Element", "HtmlCanvasElement", "Window"] }

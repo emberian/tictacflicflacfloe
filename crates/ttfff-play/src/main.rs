@@ -2,7 +2,6 @@
 
 use eframe::egui;
 use egui::{vec2, Color32, Rect, Shape, Stroke};
-use std::time::Instant;
 
 use ttfff_explore::*;
 
@@ -54,6 +53,35 @@ enum LineStyle {
     ActiveWinning,
     /// Potential winning line on hover - dashed/subtle
     PotentialWinning,
+}
+
+/// Symbol animation state
+#[derive(Clone, Copy, Debug)]
+struct SymbolAnimation {
+    place: PlaceIdx,
+    symbol: Sym,
+    start_time: f64,
+    duration: f64,
+}
+
+impl SymbolAnimation {
+    fn new(place: PlaceIdx, symbol: Sym, current_time: f64) -> Self {
+        Self {
+            place,
+            symbol,
+            start_time: current_time,
+            duration: 0.3,
+        }
+    }
+    
+    fn progress(&self, current_time: f64) -> f32 {
+        let elapsed = current_time - self.start_time;
+        (elapsed / self.duration).min(1.0) as f32
+    }
+    
+    fn is_complete(&self, current_time: f64) -> bool {
+        current_time - self.start_time >= self.duration
+    }
 }
 
 /// Visual theme
@@ -205,8 +233,8 @@ struct TtfffApp {
     game_mode: GameMode,
     /// Move history with timestamps
     move_history: Vec<MoveEntry>,
-    /// Game start time
-    game_start: Instant,
+    /// Game start time (seconds since app start)
+    game_start: f64,
     /// Current active tab
     active_tab: UiTab,
     /// Show hints
@@ -217,8 +245,6 @@ struct TtfffApp {
     animation_time: f64,
     /// AI thinking delay for visibility
     ai_delay: f64,
-    /// Last frame time for animations
-    last_frame_time: Option<Instant>,
     /// Active lines (formed during game)
     active_lines: Vec<WinningLine>,
     /// Potential lines (on hover)
@@ -227,6 +253,14 @@ struct TtfffApp {
     sound_effects: bool,
     /// Show coordinates on board
     show_coordinates: bool,
+    /// Active symbol animations
+    symbol_animations: Vec<SymbolAnimation>,
+    /// Show score impact
+    show_score_impact: bool,
+    /// Show rematch dialog
+    show_rematch_dialog: bool,
+    /// Winning line animation progress
+    winning_line_animation: f64,
 }
 
 /// Track game statistics across multiple games.
@@ -295,17 +329,20 @@ impl Default for TtfffApp {
             ai_thinking: false,
             game_mode: GameMode::HumanVsHuman,
             move_history: Vec::new(),
-            game_start: Instant::now(),
+            game_start: 0.0,
             active_tab: UiTab::Game,
             show_hints: false,
             theme: Theme::Dark,
             animation_time: 0.0,
             ai_delay: 0.0,
-            last_frame_time: None,
             active_lines: Vec::new(),
+            show_coordinates: false,
+            symbol_animations: Vec::new(),
+            show_score_impact: false,
+            show_rematch_dialog: false,
+            winning_line_animation: 0.0,
             potential_lines: Vec::new(),
             sound_effects: false,
-            show_coordinates: false,
         }
     }
 }
@@ -320,6 +357,7 @@ impl TtfffApp {
         let active_tab = self.active_tab;
         let sound_effects = self.sound_effects;
         let show_coordinates = self.show_coordinates;
+        let show_score_impact = self.show_score_impact;
         *self = Self::default();
         self.stats = stats;
         self.game_mode = game_mode;
@@ -328,10 +366,14 @@ impl TtfffApp {
         self.active_tab = active_tab;
         self.sound_effects = sound_effects;
         self.show_coordinates = show_coordinates;
-        self.game_start = Instant::now();
+        self.show_score_impact = show_score_impact;
+        self.sound_effects = sound_effects;
+        self.show_coordinates = show_coordinates;
+        self.show_score_impact = show_score_impact;
+        self.game_start = self.animation_time;
+        self.show_rematch_dialog = false;
     }
     
-    /// Set game mode and restart
     fn set_game_mode(&mut self, mode: GameMode) {
         self.game_mode = mode;
         self.new_game();
@@ -362,8 +404,15 @@ impl TtfffApp {
             self.last_move = Some(game_move);
             self.move_count += 1;
             
+            // Add symbol animation
+            self.symbol_animations.push(SymbolAnimation::new(
+                game_move.place,
+                game_move.drawn_symbol,
+                self.animation_time,
+            ));
+            
             // Add to move history with timestamp
-            let elapsed = self.game_start.elapsed().as_secs_f64();
+            let elapsed = self.animation_time - self.game_start;
             self.move_history.push(MoveEntry {
                 game_move,
                 timestamp: elapsed,
@@ -435,6 +484,10 @@ impl TtfffApp {
             };
             self.outcome = Some(outcome);
             self.winning_lines = self.detect_winning_lines();
+            self.winning_line_animation = 0.0;
+            
+            // Show rematch dialog after a delay
+            self.show_rematch_dialog = true;
             
             // Update statistics
             self.stats.games_played += 1;
@@ -643,14 +696,8 @@ impl eframe::App for TtfffApp {
         };
         ctx.set_visuals(visuals);
         
-        // Calculate delta time for animations
-        let now = Instant::now();
-        let dt = if let Some(last) = self.last_frame_time {
-            now.duration_since(last).as_secs_f64()
-        } else {
-            0.016
-        };
-        self.last_frame_time = Some(now);
+        // Calculate delta time for animations using egui's time
+        let dt = ctx.input(|i| i.stable_dt as f64).min(0.1); // Cap at 100ms to prevent huge jumps
         self.animation_time += dt;
         
         // Handle keyboard shortcuts
@@ -664,7 +711,47 @@ impl eframe::App for TtfffApp {
             if i.key_pressed(egui::Key::H) {
                 self.show_hints = !self.show_hints;
             }
+            if i.key_pressed(egui::Key::R) {
+                self.new_game();
+            }
+            if i.key_pressed(egui::Key::T) {
+                self.theme = if self.theme == Theme::Dark { Theme::Light } else { Theme::Dark };
+            }
+            if i.key_pressed(egui::Key::Escape) {
+                self.show_rematch_dialog = false;
+            }
+            
+            // Number keys 1-9 for quick move selection
+            for num in 1..=9 {
+                if i.key_pressed(match num {
+                    1 => egui::Key::Num1,
+                    2 => egui::Key::Num2,
+                    3 => egui::Key::Num3,
+                    4 => egui::Key::Num4,
+                    5 => egui::Key::Num5,
+                    6 => egui::Key::Num6,
+                    7 => egui::Key::Num7,
+                    8 => egui::Key::Num8,
+                    9 => egui::Key::Num9,
+                    _ => continue,
+                }) {
+                    // Find first available move at this position
+                    let place_idx = PlaceIdx((num - 1) as u8);
+                    if let Some(&game_move) = self.possible_moves.iter()
+                        .find(|m| m.place == place_idx) {
+                        self.handle_move_click(game_move);
+                    }
+                }
+            }
         });
+        
+        // Update winning line animation
+        if self.outcome.is_some() && self.winning_line_animation < 1.0 {
+            self.winning_line_animation = (self.winning_line_animation + dt * 2.0).min(1.0);
+        }
+        
+        // Clean up completed animations
+        self.symbol_animations.retain(|anim| !anim.is_complete(self.animation_time));
         
         // Request continuous repaint for animations and AI
         ctx.request_repaint();
@@ -720,7 +807,9 @@ impl eframe::App for TtfffApp {
                 });
                 
                 ui.menu_button("View", |ui| {
-                    ui.checkbox(&mut self.show_hints, "Show Hints");
+                    ui.checkbox(&mut self.show_hints, "Show Hints (H)");
+                    ui.checkbox(&mut self.show_score_impact, "Show Score Impact");
+                    ui.checkbox(&mut self.show_coordinates, "Show Coordinates");
                     ui.separator();
                     if ui.selectable_label(self.active_tab == UiTab::Game, "Game").clicked() {
                         self.active_tab = UiTab::Game;
@@ -731,6 +820,15 @@ impl eframe::App for TtfffApp {
                     if ui.selectable_label(self.active_tab == UiTab::Settings, "Settings").clicked() {
                         self.active_tab = UiTab::Settings;
                     }
+                    ui.separator();
+                    ui.menu_button("Theme", |ui| {
+                        if ui.radio_value(&mut self.theme, Theme::Dark, "🌙 Dark (T)").clicked() {
+                            ui.close_menu();
+                        }
+                        if ui.radio_value(&mut self.theme, Theme::Light, "☀️ Light (T)").clicked() {
+                            ui.close_menu();
+                        }
+                    });
                 });
             });
         });
@@ -769,17 +867,16 @@ impl eframe::App for TtfffApp {
                 ui.label(format!("Score: XS {} - {} OT", score.xs, score.ot));
                 ui.label(format!("Moves: {}", self.move_count));
                 
-                let elapsed = self.game_start.elapsed().as_secs();
+                let elapsed = (self.animation_time - self.game_start) as u64;
                 ui.label(format!("Time: {}:{:02}", elapsed / 60, elapsed % 60));
                 
                 ui.add_space(10.0);
             });
         });
 
-        // --- Left Panel: Controls ---
-        egui::SidePanel::left("controls").show(ctx, |ui| {
+        // --- Left Panel: Controls and Settings ---
+        egui::SidePanel::left("controls").min_width(200.0).show(ctx, |ui| {
             ui.add_space(10.0);
-            ui.heading("Controls");
             ui.separator();
             ui.add_space(10.0);
 
@@ -855,16 +952,73 @@ impl eframe::App for TtfffApp {
                 }
                 UiTab::Analysis => {
                     ui.heading("Analysis");
-                    ui.label(format!("Active Lines: {}", self.active_lines.len()));
-                    ui.label(format!("Possible Moves: {}", self.possible_moves.len()));
+                    ui.separator();
+                    ui.add_space(5.0);
                     
-                    if self.show_hints {
-                        if let Some((_best_move, reason)) = self.get_best_move_hint() {
-                            ui.add_space(10.0);
-                            ui.label(egui::RichText::new("💡 Hint:").color(Color32::YELLOW));
+                    ui.label(format!("📊 Active Lines: {}", self.active_lines.len()));
+                    ui.label(format!("🎯 Possible Moves: {}", self.possible_moves.len()));
+                    
+                    ui.add_space(10.0);
+                    ui.separator();
+                    ui.label("Position Evaluation:");
+                    
+                    let score = self.game.score();
+                    let eval_text = if let Some(winner) = score.winner() {
+                        match winner {
+                            Player::XS => "🏆 XS is winning!".to_string(),
+                            Player::OT => "🏆 OT is winning!".to_string(),
+                        }
+                    } else if score.xs == score.ot {
+                        "⚖️ Position is equal".to_string()
+                    } else if score.xs > score.ot {
+                        format!("📈 XS ahead by {}", score.xs - score.ot)
+                    } else {
+                        format!("📈 OT ahead by {}", score.ot - score.xs)
+                    };
+                    ui.label(eval_text);
+                    
+                    if self.show_hints && self.outcome.is_none() {
+                        ui.add_space(10.0);
+                        ui.separator();
+                        if let Some((best_move, reason)) = self.get_best_move_hint() {
+                            ui.label(egui::RichText::new("💡 Best Move:").color(Color32::YELLOW).strong());
                             ui.label(reason);
+                            
+                            // Show what happens after this move
+                            if let Some(next_game) = self.game.try_move(best_move) {
+                                let next_score = next_game.score();
+                                let current_score = self.game.score();
+                                let score_change = match self.game.whos_next {
+                                    Player::XS => (next_score.xs as i32) - (current_score.xs as i32),
+                                    Player::OT => (next_score.ot as i32) - (current_score.ot as i32),
+                                };
+                                if score_change > 0 {
+                                    ui.label(format!("📊 Score impact: +{}", score_change));
+                                }
+                            }
                         }
                     }
+                    
+                    ui.add_space(10.0);
+                    ui.separator();
+                    ui.label("Symbol Distribution:");
+                    let mut sym_counts = [0; 4];
+                    for place in &self.game.board.places {
+                        match place {
+                            Place::OnePlaced(s) => sym_counts[*s as usize] += 1,
+                            Place::TwoPlaced(s1, s2) => {
+                                sym_counts[*s1 as usize] += 1;
+                                sym_counts[*s2 as usize] += 1;
+                            }
+                            _ => {}
+                        }
+                    }
+                    ui.horizontal(|ui| {
+                        ui.colored_label(PS_BLUE, format!("X: {}", sym_counts[Sym::X as usize]));
+                        ui.colored_label(PS_RED, format!("O: {}", sym_counts[Sym::O as usize]));
+                        ui.colored_label(PS_GREEN, format!("T: {}", sym_counts[Sym::T as usize]));
+                        ui.colored_label(PS_PINK, format!("S: {}", sym_counts[Sym::S as usize]));
+                    });
                 }
                 UiTab::Settings => {
                     ui.heading("Settings");
@@ -891,7 +1045,11 @@ impl eframe::App for TtfffApp {
                     ui.heading("Keyboard Shortcuts");
                     ui.label("⌘N / Ctrl+N: New Game");
                     ui.label("⌘Z / Ctrl+Z: Undo");
+                    ui.label("R: Restart Game");
                     ui.label("H: Toggle Hints");
+                    ui.label("T: Toggle Theme");
+                    ui.label("1-9: Quick cell select");
+                    ui.label("ESC: Close dialogs");
                 }
             }
             
@@ -908,35 +1066,63 @@ impl eframe::App for TtfffApp {
         });
         
         // --- Right Panel: Move History ---
-        egui::SidePanel::right("history").show(ctx, |ui| {
+        egui::SidePanel::right("history").min_width(200.0).show(ctx, |ui| {
             ui.add_space(10.0);
             ui.heading("Move History");
             ui.separator();
             ui.add_space(5.0);
             
-            egui::ScrollArea::vertical().show(ui, |ui| {
-                for (idx, entry) in self.move_history.iter().enumerate() {
-                    let player_str = match entry.game_move.who {
-                        Player::XS => "XS",
-                        Player::OT => "OT",
-                    };
-                    let sym_str = match entry.game_move.drawn_symbol {
-                        Sym::X => "X",
-                        Sym::O => "O",
-                        Sym::T => "T",
-                        Sym::S => "S",
-                    };
-                    let pos = entry.game_move.place.0 + 1;
-                    
-                    ui.horizontal(|ui| {
-                        ui.label(format!("{}.", idx + 1));
-                        ui.colored_label(
-                            sym_color(entry.game_move.drawn_symbol),
-                            format!("{} {} → {}", player_str, sym_str, pos)
-                        );
-                    });
-                }
-            });
+            if self.move_history.is_empty() {
+                ui.label(egui::RichText::new("No moves yet").italics().weak());
+            } else {
+                egui::ScrollArea::vertical().show(ui, |ui| {
+                    for (idx, entry) in self.move_history.iter().enumerate() {
+                        let player_str = match entry.game_move.who {
+                            Player::XS => "XS",
+                            Player::OT => "OT",
+                        };
+                        let sym_str = match entry.game_move.drawn_symbol {
+                            Sym::X => "X",
+                            Sym::O => "O",
+                            Sym::T => "T",
+                            Sym::S => "S",
+                        };
+                        let pos = entry.game_move.place.0 + 1;
+                        
+                        let is_last = idx == self.move_history.len() - 1;
+                        let bg_color = if is_last {
+                            if self.theme == Theme::Dark {
+                                Color32::from_rgba_premultiplied(80, 80, 100, 100)
+                            } else {
+                                Color32::from_rgba_premultiplied(200, 200, 220, 100)
+                            }
+                        } else {
+                            Color32::TRANSPARENT
+                        };
+                        
+                        let frame = egui::Frame::new()
+                            .fill(bg_color)
+                            .inner_margin(egui::Margin::symmetric(4, 2));
+                        
+                        frame.show(ui, |ui| {
+                            ui.horizontal(|ui| {
+                                ui.label(format!("{}.", idx + 1));
+                                ui.colored_label(
+                                    sym_color(entry.game_move.drawn_symbol),
+                                    format!("{} {} → {}", player_str, sym_str, pos)
+                                );
+                                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                    ui.label(
+                                        egui::RichText::new(format!("{:.1}s", entry.timestamp))
+                                            .small()
+                                            .weak()
+                                    );
+                                });
+                            });
+                        });
+                    }
+                });
+            }
         });
 
         // --- Central Panel: Game Board ---
@@ -952,11 +1138,12 @@ impl eframe::App for TtfffApp {
             let x_offset = (available_size.x - grid_size) / 2.0;
             let y_offset = (available_size.y - grid_size) / 2.0;
             
-            ui.allocate_ui_at_rect(
-                egui::Rect::from_min_size(
-                    ui.min_rect().min + egui::vec2(x_offset, y_offset),
-                    egui::vec2(grid_size, grid_size)
-                ),
+            ui.allocate_new_ui(
+                egui::UiBuilder::new()
+                    .max_rect(egui::Rect::from_min_size(
+                        ui.min_rect().min + egui::vec2(x_offset, y_offset),
+                        egui::vec2(grid_size, grid_size)
+                    )),
                 |ui| {
                     // Store cell centers for drawing winning lines
                     let mut cell_centers = [egui::pos2(0.0, 0.0); 9];
@@ -1098,6 +1285,10 @@ impl eframe::App for TtfffApp {
                                     m.place == place_idx && m.drawn_symbol == sym
                                 );
                                 
+                                // Check if this symbol is animating
+                                let anim = self.symbol_animations.iter()
+                                    .find(|a| a.place == place_idx && a.symbol == sym);
+                                
                                 let style = if placed_symbols.contains(&sym) {
                                     SymbolStyle::PlacedByOpponent
                                 } else if available_symbols.contains(&sym) {
@@ -1110,8 +1301,15 @@ impl eframe::App for TtfffApp {
                                     SymbolStyle::Available
                                 };
                                 
-                                // Add subtle pulse animation for hint
-                                let final_rect = if is_hint_sym {
+                                // Apply animation or hint pulse
+                                let final_rect = if let Some(anim) = anim {
+                                    let progress = anim.progress(self.animation_time);
+                                    // Ease out cubic
+                                    let ease = 1.0 - (1.0 - progress).powi(3);
+                                    let scale = 0.3 + ease * 0.7;
+                                    let center = quad_rect.center();
+                                    Rect::from_center_size(center, quad_rect.size() * scale)
+                                } else if is_hint_sym {
                                     let pulse = (self.animation_time * 3.0).sin() * 0.5 + 0.5;
                                     let expand = (pulse * 2.0) as f32;
                                     quad_rect.expand(expand)
@@ -1120,6 +1318,31 @@ impl eframe::App for TtfffApp {
                                 };
                                 
                                 draw_sym(sym, final_rect, ui, style);
+                                
+                                // Show score impact on hover
+                                if self.show_score_impact && is_hovered && available_symbols.contains(&sym) {
+                                    if let Some(game_move) = potential_moves_for_cell.iter()
+                                        .find(|m| m.drawn_symbol == sym) {
+                                        if let Some(next_game) = self.game.try_move(*game_move) {
+                                            let current_score = self.game.score();
+                                            let next_score = next_game.score();
+                                            let impact = match self.game.whos_next {
+                                                Player::XS => (next_score.xs as i32) - (current_score.xs as i32),
+                                                Player::OT => (next_score.ot as i32) - (current_score.ot as i32),
+                                            };
+                                            if impact > 0 {
+                                                let text_pos = quad_rect.center();
+                                                ui.painter().text(
+                                                    text_pos,
+                                                    egui::Align2::CENTER_CENTER,
+                                                    format!("+{}", impact),
+                                                    egui::FontId::proportional(14.0),
+                                                    Color32::from_rgba_premultiplied(255, 255, 255, 180),
+                                                );
+                                            }
+                                        }
+                                    }
+                                }
                             }
                             
                             // Handle clicks
@@ -1166,10 +1389,29 @@ impl eframe::App for TtfffApp {
                         }
                     }
                     
-                    // Draw final winning lines (game over)
+                    // Draw final winning lines (game over) with animation
                     if self.outcome.is_some() {
                         for line in &self.winning_lines {
-                            draw_winning_line(ui, line, &cell_centers, LineStyle::FinalWinning);
+                            // Animate winning line appearance
+                            if self.winning_line_animation < 1.0 {
+                                let start_pos = cell_centers[line.indices[0]];
+                                let end_pos = cell_centers[line.indices[2]];
+                                let animated_end = start_pos + (end_pos - start_pos) * self.winning_line_animation as f32;
+                                
+                                let color = sym_color(line.symbol);
+                                ui.painter().line_segment([start_pos, animated_end], Stroke::new(6.0, color));
+                                ui.painter().line_segment(
+                                    [start_pos, animated_end],
+                                    Stroke::new(12.0, Color32::from_rgba_premultiplied(
+                                        color.r(),
+                                        color.g(),
+                                        color.b(),
+                                        60,
+                                    )),
+                                );
+                            } else {
+                                draw_winning_line(ui, line, &cell_centers, LineStyle::FinalWinning);
+                            }
                         }
                     }
                 },
@@ -1186,6 +1428,69 @@ impl eframe::App for TtfffApp {
                 self.potential_lines.clear();
             }
         }
+        
+        // Show rematch dialog
+        if self.show_rematch_dialog && self.outcome.is_some() {
+            egui::Window::new("Game Over")
+                .collapsible(false)
+                .resizable(false)
+                .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+                .show(ctx, |ui| {
+                    ui.vertical_centered(|ui| {
+                        ui.add_space(10.0);
+                        
+                        // Show outcome with nice formatting
+                        let (message, color) = match self.outcome.unwrap() {
+                            GameOutcome::Winner(Player::XS) => ("🏆 Player XS Wins! 🏆", PS_BLUE),
+                            GameOutcome::Winner(Player::OT) => ("🏆 Player OT Wins! 🏆", PS_RED),
+                            GameOutcome::Draw => ("🤝 It's a Draw! 🤝", Color32::GRAY),
+                        };
+                        ui.label(egui::RichText::new(message).size(24.0).color(color).strong());
+                        
+                        ui.add_space(10.0);
+                        
+                        // Game statistics
+                        let score = self.game.score();
+                        ui.label(format!("Final Score: XS {} - {} OT", score.xs, score.ot));
+                        ui.label(format!("Moves: {}", self.move_count));
+                        let elapsed = (self.animation_time - self.game_start) as u64;
+                        ui.label(format!("Time: {}:{:02}", elapsed / 60, elapsed % 60));
+                        
+                        ui.add_space(15.0);
+                        ui.separator();
+                        ui.add_space(5.0);
+                        
+                        ui.horizontal(|ui| {
+                            ui.colored_label(PS_BLUE, format!("XS Wins: {}", self.stats.xs_wins));
+                            ui.label("-");
+                            ui.colored_label(PS_RED, format!("OT Wins: {}", self.stats.ot_wins));
+                        });
+                        ui.label(format!("Draws: {}", self.stats.draws));
+                        
+                        if self.stats.games_played > 0 {
+                            let xs_pct = (self.stats.xs_wins as f32 / self.stats.games_played as f32 * 100.0) as u32;
+                            let ot_pct = (self.stats.ot_wins as f32 / self.stats.games_played as f32 * 100.0) as u32;
+                            ui.label(format!("Win Rate: XS {}% / OT {}%", xs_pct, ot_pct));
+                        }
+                        
+                        ui.add_space(15.0);
+                        ui.separator();
+                        ui.add_space(10.0);
+                        
+                        // Action buttons
+                        ui.horizontal(|ui| {
+                            if ui.button("🔄 New Game").clicked() {
+                                self.new_game();
+                            }
+                            if ui.button("✖ Close").clicked() {
+                                self.show_rematch_dialog = false;
+                            }
+                        });
+                        
+                        ui.add_space(10.0);
+                    });
+                });
+        }
     }
 }
 
@@ -1193,6 +1498,7 @@ impl eframe::App for TtfffApp {
 //  MAIN FUNCTION
 //=============================================================================
 
+#[cfg(not(target_arch = "wasm32"))]
 fn main() -> eframe::Result<()> {
     let native_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
@@ -1205,4 +1511,38 @@ fn main() -> eframe::Result<()> {
         native_options,
         Box::new(|_cc| Ok(Box::<TtfffApp>::default())),
     )
+}
+
+#[cfg(target_arch = "wasm32")]
+fn main() {
+    use eframe::wasm_bindgen::JsCast;
+    // Redirect panics to console.error
+    console_error_panic_hook::set_once();
+    
+    // Initialize logging
+    tracing_wasm::set_as_global_default();
+    
+    let web_options = eframe::WebOptions::default();
+    
+    wasm_bindgen_futures::spawn_local(async {
+        let document = eframe::web_sys::window()
+            .expect("No window")
+            .document()
+            .expect("No document");
+        
+        let canvas = document
+            .get_element_by_id("the_canvas_id")
+            .expect("Failed to find canvas")
+            .dyn_into::<web_sys::HtmlCanvasElement>()
+            .expect("Element is not a canvas");
+        
+        eframe::WebRunner::new()
+            .start(
+                canvas,
+                web_options,
+                Box::new(|_cc| Ok(Box::<TtfffApp>::default())),
+            )
+            .await
+            .expect("Failed to start eframe");
+    });
 }

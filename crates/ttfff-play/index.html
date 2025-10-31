@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Tic Tac Flic Flac Floe - A unique twist on tic-tac-toe with multiple symbols and strategic gameplay">
+    <meta name="theme-color" content="#764ba2">
+    <title>Tic Tac Flic Flac Floe</title>
+    
+    <link rel="manifest" href="manifest.json">
+    
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        
+        #loading {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            font-size: 24px;
+            z-index: 9999;
+            transition: opacity 0.5s;
+        }
+        
+        #loading.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+        
+        .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top: 4px solid white;
+            width: 60px;
+            height: 60px;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        canvas {
+            margin: 0;
+            padding: 0;
+        }
+        
+        #error {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: #ff4444;
+            color: white;
+            padding: 20px 40px;
+            border-radius: 10px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            text-align: center;
+            max-width: 80%;
+            z-index: 10000;
+        }
+    </style>
+    
+    <link data-trunk rel="rust" data-wasm-opt="z" />
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='0.9em' font-size='90'>🎮</text></svg>" />
+</head>
+<body>
+    <div id="loading">
+        <div class="spinner"></div>
+        <div>Loading Tic Tac Flic Flac Floe...</div>
+    </div>
+    
+    <canvas id="the_canvas_id"></canvas>
+    
+    <div id="error"></div>
+    
+    <script>
+        // Hide loading screen once the WASM module is loaded
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                document.getElementById('loading').classList.add('hidden');
+            }, 1000);
+        });
+        
+        // Error handling
+        window.addEventListener('error', (e) => {
+            const errorDiv = document.getElementById('error');
+            errorDiv.textContent = 'Failed to load the game. Please refresh the page.';
+            errorDiv.style.display = 'block';
+            console.error('Error:', e);
+        });
+        
+        // Service worker for offline support (optional)
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js').catch(() => {
+                    // Service worker registration failed, but that's okay
+                });
+            });
+        }
+    </script>
+</body>
+</html>

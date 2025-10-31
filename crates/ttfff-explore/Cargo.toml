@@ -2,6 +2,14 @@
 name = "ttfff-explore"
 version = "0.1.0"
 edition = "2024"
+repository = "https://github.com/emberian/tictacflicflacfloe"
+authors = ["ember arlynx <ember@lunar.town>"]
+
+[package.metadata.wix]
+upgrade-guid = "4E08ED62-EE0C-4D73-8291-5CEF900D9F60"
+path-guid = "BE967514-A41A-4A7F-9356-94CFEC381A19"
+license = false
+eula = false
 
 [dependencies]
 ttfff-logic = { path = "../ttfff-logic" }

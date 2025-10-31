@@ -1,0 +1,20 @@
+[build]
+target = "index.html"
+release = true
+dist = "dist"
+public_url = "/"
+
+[[copy-files]]
+source = "manifest.json"
+target = "manifest.json"
+
+[[copy-files]]
+source = "sw.js"
+target = "sw.js"
+
+[watch]
+ignore = ["dist"]
+
+[serve]
+address = "127.0.0.1"
+port = 8080
