@@ -1,5 +1,7 @@
 # Tic Tac Flic Flac Floe - an abstract strategy game
 
+(no ai in this repo)
+
 The game is played on a standard 3x3 "tic tac toe" grid.
 
 However, instead of just X and O, there are also T and S.
@@ -19,10 +21,15 @@ Part of this project is to explore different win conditions.
 The original win condition (to be explored) is "the player
 with the most three-in-a-rows".
 
-## Questions
+## Questions to explore when altering mechanics
 
 - Do players always have an available move until the board is filled?
+   + Be careful when forbidding game states
 - Is this equivalent to two parallel regular tic-tac-toes?
+   + First version is, extensions shouldn't be
 - Is the game balanced? Is there first player advantage?
+   + Try to keep it symmetric.
 - Can we solve the game, or force draws like in tictactoe?
+   + Hehe.
 - What symmetries exist.
+   + The OG game gets the square symmetries (D4) plus player-transpose and also symbol-swap.
