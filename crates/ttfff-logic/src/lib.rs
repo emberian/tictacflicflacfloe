@@ -140,7 +140,7 @@ impl Game {
     }
 }
 
-#[derive(Copy, Clone, Hash, Eq, PartialEq)]
+#[derive(Copy, Clone, Hash, Eq, PartialEq, Debug)]
 pub struct GameMove {
     pub who: Player,
     pub place: PlaceIdx,
