@@ -92,6 +92,18 @@ impl Place {
             TwoPlaced(s1, s2) => *s1 == sym || *s2 == sym,
         }
     }
+
+    pub fn transpose(self) -> Place {
+        match self {
+            Empty => Empty,
+            OnePlaced(s) => OnePlaced(s.excludes()),
+            TwoPlaced(s1, s2) => {
+                let s1 = s1.excludes();
+                let s2 = s2.excludes();
+                TwoPlaced(min(s1, s2), max(s1, s2))
+            }
+        }
+    }
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
@@ -113,12 +125,29 @@ pub struct Board {
     pub places: [Place; 9],
 }
 
+impl Board {
+    pub fn transpose(&self) -> Board {
+        Board {
+            places: self.places.map(|p| p.transpose()),
+        }
+    }
+}
+
 // A game is only 19 bytes.
 // But game.to_bits() packs it into u64.
 #[derive(Copy, Clone, Hash, Eq, PartialEq, Debug)]
 pub struct Game {
     pub whos_next: Player,
     pub board: Board,
+}
+
+impl Game {
+    pub fn transpose(&self) -> Game {
+        Game {
+            whos_next: self.whos_next.other(),
+            board: self.board.transpose(),
+        }
+    }
 }
 
 #[derive(Copy, Clone, Hash, Eq, PartialEq)]
